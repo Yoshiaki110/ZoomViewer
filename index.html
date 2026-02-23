@@ -59,7 +59,8 @@
         #tunnel-container {
             position: absolute;
             top: 0; left: 0; width: 100vw; height: 100vh;
-            perspective: 800px; /* 奥行きを少し広く調整 */
+            perspective: 800px;
+            /* 画面中央を基準にする */
             display: flex;
             justify-content: center;
             align-items: center;
@@ -68,20 +69,21 @@
         #tunnel {
             position: relative;
             transform-style: preserve-3d;
-            /* ★親要素はもう動かさないため、transitionは不要 */
         }
         
-        /* 画像カードのスタイル */
+        /* ★修正：画像カードのスタイル（縦横比を維持する設定） */
         .img-card {
             position: absolute;
-            width: 320px;
-            height: 220px;
-            margin-left: -160px;
-            margin-top: -110px;
-            object-fit: cover;
+            /* 固定サイズとネガティブマージンを削除し、最大サイズを指定 */
+            max-width: 350px;
+            max-height: 350px;
+            
+            /* 常に画面の中央を起点にする */
+            top: 50%;
+            left: 50%;
+            
             border-radius: 10px;
             box-shadow: 0 5px 20px rgba(0,0,0,0.8);
-            /* ★子要素（画像）そのものがアニメーション移動するように変更 */
             transition: transform 0.8s ease-in-out, opacity 0.5s ease-in-out;
             cursor: pointer;
         }
@@ -190,15 +192,14 @@
             img.src = url;
             img.className = 'img-card';
             
-            // 【★ロジック変更】生成時にそれぞれの画像の正確な初期位置を計算する
             const angle = i * (Math.PI / 2.5); 
             const x = Math.cos(angle) * TUNNEL_RADIUS;
             const y = Math.sin(angle) * TUNNEL_RADIUS;
-            const z = -i * Z_GAP; // 初期位置
+            const z = -i * Z_GAP;
             
-            img.style.transform = `translate3d(${x}px, ${y}px, ${z}px)`;
+            // ★修正：translate(-50%, -50%) を最初に入れることで、縦長でも横長でも「画像の中心」が正確に配置されます
+            img.style.transform = `translate(-50%, -50%) translate3d(${x}px, ${y}px, ${z}px)`;
             
-            // 初期の透明度・クリック可否を設定
             if (i < currentIndex) {
                 img.style.opacity = '0';
                 img.style.pointerEvents = 'none';
@@ -226,25 +227,21 @@
         }
     }
 
-    // 【★ロジック変更】トンネルは動かさず、各画像のZ座標を再計算して移動させる
     function updatePositions() {
         const cards = document.querySelectorAll('.img-card');
         cards.forEach((card, i) => {
             const angle = i * (Math.PI / 2.5);
             const x = Math.cos(angle) * TUNNEL_RADIUS;
             const y = Math.sin(angle) * TUNNEL_RADIUS;
-            
-            // 現在の焦点(currentIndex)に基づいて、全画像のZ座標を手前/奥へスライドさせる
             const currentZ = -(i - currentIndex) * Z_GAP;
             
-            card.style.transform = `translate3d(${x}px, ${y}px, ${currentZ}px)`;
+            // ★修正：ここでも translate(-50%, -50%) を維持します
+            card.style.transform = `translate(-50%, -50%) translate3d(${x}px, ${y}px, ${currentZ}px)`;
 
             if (i < currentIndex) {
-                // カメラの後ろに通り過ぎた画像
                 card.style.opacity = '0';
                 card.style.pointerEvents = 'none';
             } else {
-                // 現在の画像、および奥にある画像
                 card.style.opacity = '1';
                 card.style.pointerEvents = 'auto';
             }
