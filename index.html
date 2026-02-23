@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Tunnel Image Gallery</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #050505; 
+            color: white; 
+            font-family: sans-serif;
+        }
+        
+        /* 上部コントロール */
+        #controls { 
+            position: absolute; 
+            top: 20px; 
+            left: 20px; 
+            z-index: 100; 
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 8px;
+        }
+        select, button {
+            padding: 8px 12px;
+            font-size: 16px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        /* 前・後ボタン */
+        #nav-buttons { 
+            position: absolute; 
+            bottom: 40px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            z-index: 100; 
+            display: none;
+        }
+        #nav-buttons button {
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 30px;
+            border: none;
+            background: rgba(255, 255, 255, 0.9);
+            color: #111;
+            margin: 0 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            transition: background 0.2s;
+        }
+        #nav-buttons button:hover {
+            background: #fff;
+        }
+
+        /* 3Dトンネルコンテナ */
+        #tunnel-container {
+            position: absolute;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            perspective: 600px; /* 奥行きのパースを強調 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        #tunnel {
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.8s ease-in-out; /* 移動のアニメーションを少しゆったりに */
+        }
+        
+        /* 画像カードのスタイル（周囲に散らすためにサイズ調整） */
+        .img-card {
+            position: absolute;
+            width: 320px;
+            height: 220px;
+            /* 基準を画面中央にする */
+            margin-left: -160px;
+            margin-top: -110px;
+            object-fit: cover;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.8);
+            transition: opacity 0.5s ease-in-out;
+            cursor: pointer;
+        }
+        .img-card:hover {
+            box-shadow: 0 0 20px rgba(255,255,255,0.8);
+            border: 2px solid white;
+        }
+
+        /* 全画面ビューア */
+        #fullscreen-viewer {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.95);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+        }
+        #fullscreen-viewer img {
+            max-width: 95%; max-height: 95%;
+            object-fit: contain;
+        }
+        #close-btn {
+            position: absolute; top: 20px; right: 30px;
+            font-size: 50px; color: white; cursor: pointer;
+            user-select: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="controls">
+    <select id="folder-select">
+        <option value="sample">サンプル画像</option>
+        <option value="local">パソコン内のフォルダを選択...</option>
+    </select>
+    <button onclick="handleLoad()">表示</button>
+    <input type="file" id="folder-input" webkitdirectory directory multiple style="display: none;">
+</div>
+
+<div id="nav-buttons">
+    <button onclick="moveFront()">前</button>
+    <button onclick="moveBack()">後</button>
+</div>
+
+<div id="tunnel-container">
+    <div id="tunnel"></div>
+</div>
+
+<div id="fullscreen-viewer" onclick="closeFullscreen()">
+    <span id="close-btn">&times;</span>
+    <img id="fullscreen-img" src="" alt="Fullscreen">
+</div>
+
+<script>
+    const SAMPLE_IMAGES = [
+        "/img/01.jpg",
+        "/img/02.jpg",
+        "/img/03.jpg",
+        "/img/04.jpg",
+        "/img/05.jpg",
+        "/img/06.jpg",
+        "/img/07.jpg",
+        "/img/08.jpg",
+        "/img/09.jpg",
+        "/img/10.jpg"
+    ];
+
+    let images = [];
+    let currentIndex = 0;
+    
+    // トンネルのサイズ設定
+    const Z_GAP = 500;       // 奥行きの間隔
+    const TUNNEL_RADIUS = 350; // トンネルの半径（画像を周囲にどれくらい離すか）
+
+    function handleLoad() {
+        const mode = document.getElementById('folder-select').value;
+        if (mode === 'sample') {
+            images = [...SAMPLE_IMAGES];
+            startViewer();
+        } else {
+            document.getElementById('folder-input').click();
+        }
+    }
+
+    document.getElementById('folder-input').addEventListener('change', function(event) {
+        const files = Array.from(event.target.files).filter(file => file.type.startsWith('image/'));
+        if (files.length === 0) {
+            alert('画像が見つかりませんでした。');
+            return;
+        }
+        files.sort((a, b) => a.lastModified - b.lastModified);
+        images = files.map(file => URL.createObjectURL(file));
+        startViewer();
+    });
+
+    function startViewer() {
+        currentIndex = 0;
+        document.getElementById('nav-buttons').style.display = 'block';
+        
+        const tunnel = document.getElementById('tunnel');
+        tunnel.innerHTML = '';
+        tunnel.style.transform = `translateZ(0px)`;
+        
+        images.forEach((url, index) => {
+            const img = document.createElement('img');
+            img.src = url;
+            img.className = 'img-card';
+            
+            // トンネルの壁面に沿って画像を配置（角度をずらしながら円を描く）
+            const angle = index * (Math.PI / 2.5); // 約72度ずつずらす
+            const x = Math.cos(angle) * TUNNEL_RADIUS;
+            const y = Math.sin(angle) * TUNNEL_RADIUS;
+            const z = -index * Z_GAP;
+            
+            // X, Y で周囲に散らし、Z で奥へ配置する
+            img.style.transform = `translate3d(${x}px, ${y}px, ${z}px)`;
+            
+            img.onclick = () => openFullscreen(url);
+            tunnel.appendChild(img);
+        });
+        
+        updateVisibility();
+    }
+
+    function moveBack() {
+        if (currentIndex < images.length - 1) {
+            currentIndex++;
+            updateTunnelPosition();
+        }
+    }
+
+    function moveFront() {
+        if (currentIndex > 0) {
+            currentIndex--;
+            updateTunnelPosition();
+        }
+    }
+
+    function updateTunnelPosition() {
+        const tunnel = document.getElementById('tunnel');
+        // カメラが奥に進む（全体のZ座標を手前に引っ張る）
+        tunnel.style.transform = `translateZ(${currentIndex * Z_GAP}px)`;
+        updateVisibility();
+    }
+
+    function updateVisibility() {
+        const cards = document.querySelectorAll('.img-card');
+        cards.forEach((card, i) => {
+            if (i < currentIndex) {
+                // 手前に通り過ぎた画像は消す
+                card.style.opacity = '0';
+                card.style.pointerEvents = 'none';
+            } else {
+                card.style.opacity = '1';
+                card.style.pointerEvents = 'auto';
+            }
+        });
+    }
+
+    function openFullscreen(url) {
+        document.getElementById('fullscreen-viewer').style.display = 'flex';
+        document.getElementById('fullscreen-img').src = url;
+    }
+
+    function closeFullscreen() {
+        document.getElementById('fullscreen-viewer').style.display = 'none';
+        document.getElementById('fullscreen-img').src = '';
+    }
+</script>
+</body>
+</html>
