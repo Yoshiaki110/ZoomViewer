@@ -59,7 +59,7 @@
         #tunnel-container {
             position: absolute;
             top: 0; left: 0; width: 100vw; height: 100vh;
-            perspective: 600px; /* 奥行きのパースを強調 */
+            perspective: 800px; /* 奥行きを少し広く調整 */
             display: flex;
             justify-content: center;
             align-items: center;
@@ -68,21 +68,21 @@
         #tunnel {
             position: relative;
             transform-style: preserve-3d;
-            transition: transform 0.8s ease-in-out; /* 移動のアニメーションを少しゆったりに */
+            /* ★親要素はもう動かさないため、transitionは不要 */
         }
         
-        /* 画像カードのスタイル（周囲に散らすためにサイズ調整） */
+        /* 画像カードのスタイル */
         .img-card {
             position: absolute;
             width: 320px;
             height: 220px;
-            /* 基準を画面中央にする */
             margin-left: -160px;
             margin-top: -110px;
             object-fit: cover;
             border-radius: 10px;
             box-shadow: 0 5px 20px rgba(0,0,0,0.8);
-            transition: opacity 0.5s ease-in-out;
+            /* ★子要素（画像）そのものがアニメーション移動するように変更 */
+            transition: transform 0.8s ease-in-out, opacity 0.5s ease-in-out;
             cursor: pointer;
         }
         .img-card:hover {
@@ -154,8 +154,8 @@
     let currentIndex = 0;
     
     // トンネルのサイズ設定
-    const Z_GAP = 500;       // 奥行きの間隔
-    const TUNNEL_RADIUS = 350; // トンネルの半径（画像を周囲にどれくらい離すか）
+    const Z_GAP = 500;       
+    const TUNNEL_RADIUS = 350; 
 
     function handleLoad() {
         const mode = document.getElementById('folder-select').value;
@@ -184,58 +184,67 @@
         
         const tunnel = document.getElementById('tunnel');
         tunnel.innerHTML = '';
-        tunnel.style.transform = `translateZ(0px)`;
         
-        images.forEach((url, index) => {
+        images.forEach((url, i) => {
             const img = document.createElement('img');
             img.src = url;
             img.className = 'img-card';
             
-            // トンネルの壁面に沿って画像を配置（角度をずらしながら円を描く）
-            const angle = index * (Math.PI / 2.5); // 約72度ずつずらす
+            // 【★ロジック変更】生成時にそれぞれの画像の正確な初期位置を計算する
+            const angle = i * (Math.PI / 2.5); 
             const x = Math.cos(angle) * TUNNEL_RADIUS;
             const y = Math.sin(angle) * TUNNEL_RADIUS;
-            const z = -index * Z_GAP;
+            const z = -i * Z_GAP; // 初期位置
             
-            // X, Y で周囲に散らし、Z で奥へ配置する
             img.style.transform = `translate3d(${x}px, ${y}px, ${z}px)`;
+            
+            // 初期の透明度・クリック可否を設定
+            if (i < currentIndex) {
+                img.style.opacity = '0';
+                img.style.pointerEvents = 'none';
+            } else {
+                img.style.opacity = '1';
+                img.style.pointerEvents = 'auto';
+            }
             
             img.onclick = () => openFullscreen(url);
             tunnel.appendChild(img);
         });
-        
-        updateVisibility();
     }
 
     function moveBack() {
         if (currentIndex < images.length - 1) {
             currentIndex++;
-            updateTunnelPosition();
+            updatePositions();
         }
     }
 
     function moveFront() {
         if (currentIndex > 0) {
             currentIndex--;
-            updateTunnelPosition();
+            updatePositions();
         }
     }
 
-    function updateTunnelPosition() {
-        const tunnel = document.getElementById('tunnel');
-        // カメラが奥に進む（全体のZ座標を手前に引っ張る）
-        tunnel.style.transform = `translateZ(${currentIndex * Z_GAP}px)`;
-        updateVisibility();
-    }
-
-    function updateVisibility() {
+    // 【★ロジック変更】トンネルは動かさず、各画像のZ座標を再計算して移動させる
+    function updatePositions() {
         const cards = document.querySelectorAll('.img-card');
         cards.forEach((card, i) => {
+            const angle = i * (Math.PI / 2.5);
+            const x = Math.cos(angle) * TUNNEL_RADIUS;
+            const y = Math.sin(angle) * TUNNEL_RADIUS;
+            
+            // 現在の焦点(currentIndex)に基づいて、全画像のZ座標を手前/奥へスライドさせる
+            const currentZ = -(i - currentIndex) * Z_GAP;
+            
+            card.style.transform = `translate3d(${x}px, ${y}px, ${currentZ}px)`;
+
             if (i < currentIndex) {
-                // 手前に通り過ぎた画像は消す
+                // カメラの後ろに通り過ぎた画像
                 card.style.opacity = '0';
                 card.style.pointerEvents = 'none';
             } else {
+                // 現在の画像、および奥にある画像
                 card.style.opacity = '1';
                 card.style.pointerEvents = 'auto';
             }
