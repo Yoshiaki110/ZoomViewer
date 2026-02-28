@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Time Traveler</title>
+    <!--script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script-->
+    <script src="https://aframe.io/releases/0.7.1/aframe.min.js"></script>
+    <style>
+        body, html { 
+            margin: 0; 
+            padding: 0; 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            background-color: #050505; 
+            color: white; 
+            font-family: sans-serif;
+        }
+        
+        /* ギャラリー全体を覆うUI（A-FRAMEの上に被せる「幕」） */
+        #gallery-ui {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1000; 
+            background-color: #050505;
+            display: block;
+        }
+
+        #controls { 
+            position: absolute; 
+            top: 20px; 
+            left: 20px; 
+            z-index: 100; 
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 8px;
+        }
+        select, button {
+            padding: 8px 12px;
+            font-size: 16px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        #nav-buttons { 
+            position: absolute; 
+            bottom: 40px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            z-index: 100; 
+            display: none;
+        }
+        #nav-buttons button {
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 30px;
+            border: none;
+            background: rgba(255, 255, 255, 0.9);
+            color: #111;
+            margin: 0 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            transition: background 0.2s;
+        }
+
+        #tunnel-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            perspective: 800px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        #tunnel {
+            position: relative;
+            transform-style: preserve-3d;
+        }
+        
+        .img-card {
+            position: absolute;
+            max-width: 350px;
+            max-height: 350px;
+            top: 50%;
+            left: 50%;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.8);
+            transition: transform 0.8s ease-in-out, opacity 0.5s ease-in-out;
+            cursor: pointer;
+        }
+
+        /* 閉じるボタン専用のUI */
+        #custom-close-ui {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 9999; /* 確実に一番手前に出す */
+            display: none; /* 初期は隠す */
+        }
+
+        .ui-btn {
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: 2px solid white;
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .ui-btn:active {
+            background: white;
+            color: black;
+        }
+    </style>
+</head>
+<body>
+
+<div id="gallery-ui">
+    <div id="controls">
+        <select id="folder-select">
+            <option value="sample">サンプル画像</option>
+            <option value="local">パソコン内のフォルダを選択...</option>
+        </select>
+        <button onclick="handleLoad()">表示</button>
+        <input type="file" id="folder-input" webkitdirectory directory multiple style="display: none;">
+    </div>
+
+    <div id="nav-buttons">
+        <button onclick="moveFront()">前</button>
+        <button onclick="moveBack()">後</button>
+    </div>
+
+    <div id="tunnel-container">
+        <div id="tunnel"></div>
+    </div>
+</div>
+
+<div id="custom-close-ui">
+    <button class="ui-btn" onclick="closeViewer()">閉じる &times;</button>
+</div>
+
+<a-scene id="scene" style="position: absolute; top: 0; left: 0; z-index: -1; visibility: hidden;">
+    <a-entity camera look-controls position="0 1.6 0"></a-entity>
+    <a-sky id="vr-sky" src=""></a-sky>
+</a-scene>
+
+<script>
+    const SAMPLE_IMAGES = [
+        "./img360/2013.png",
+        "./img360/2004.png",
+        "./img360/1991.png",
+        "./img360/1975.png",
+        "./img360/1968.png",
+        "./img360/1966.png",
+        "./img360/1960.png",
+        "./img360/1956.png",
+        "./img360/1955.png",
+        "./img360/1954.png",
+        "./img360/1953.png",
+        "./img360/1949.png",
+        "./img360/1935.png",
+        "./img360/1917.png",
+    ];
+
+    let images = [];
+    let currentIndex = 0;
+    const Z_GAP = 500;       
+    const TUNNEL_RADIUS = 350; 
+
+    function handleLoad() {
+        const mode = document.getElementById('folder-select').value;
+        if (mode === 'sample') {
+            images = [...SAMPLE_IMAGES];
+            startViewer();
+        } else {
+            document.getElementById('folder-input').click();
+        }
+    }
+
+    document.getElementById('folder-input').addEventListener('change', function(event) {
+        const files = Array.from(event.target.files).filter(file => file.type.startsWith('image/'));
+        if (files.length === 0) return;
+        files.sort((a, b) => a.lastModified - b.lastModified);
+        images = files.map(file => URL.createObjectURL(file));
+        startViewer();
+    });
+
+    function startViewer() {
+        currentIndex = 0;
+        document.getElementById('nav-buttons').style.display = 'block';
+        const tunnel = document.getElementById('tunnel');
+        tunnel.innerHTML = '';
+        
+        images.forEach((url, i) => {
+            const img = document.createElement('img');
+            img.src = url;
+            img.className = 'img-card';
+            
+            const angle = i * (Math.PI / 2.5); 
+            const x = Math.cos(angle) * TUNNEL_RADIUS;
+            const y = Math.sin(angle) * TUNNEL_RADIUS;
+            const z = -i * Z_GAP;
+            
+            img.style.transform = `translate(-50%, -50%) translate3d(${x}px, ${y}px, ${z}px)`;
+            img.style.opacity = (i < currentIndex) ? '0' : '1';
+            img.style.pointerEvents = (i < currentIndex) ? 'none' : 'auto';
+            
+            img.onclick = () => openFullscreen(url);
+            tunnel.appendChild(img);
+        });
+    }
+
+    function moveBack() {
+        if (currentIndex < images.length - 1) { currentIndex++; updatePositions(); }
+    }
+
+    function moveFront() {
+        if (currentIndex > 0) { currentIndex--; updatePositions(); }
+    }
+
+    function updatePositions() {
+        const cards = document.querySelectorAll('.img-card');
+        cards.forEach((card, i) => {
+            const angle = i * (Math.PI / 2.5);
+            const x = Math.cos(angle) * TUNNEL_RADIUS;
+            const y = Math.sin(angle) * TUNNEL_RADIUS;
+            const currentZ = -(i - currentIndex) * Z_GAP;
+            
+            card.style.transform = `translate(-50%, -50%) translate3d(${x}px, ${y}px, ${currentZ}px)`;
+            card.style.opacity = (i < currentIndex) ? '0' : '1';
+            card.style.pointerEvents = (i < currentIndex) ? 'none' : 'auto';
+        });
+    }
+
+    // 画像クリック時：ギャラリーの幕を消し、裏にあるA-FRAMEを表に出す
+    function openFullscreen(url) {
+        document.getElementById('gallery-ui').style.display = 'none';
+        document.getElementById('custom-close-ui').style.display = 'block';
+        
+        const scene = document.getElementById('scene');
+        document.getElementById('vr-sky').setAttribute('src', url);
+        
+        // A-FRAMEを最前面に表示
+        scene.style.zIndex = '10';
+        scene.style.visibility = 'visible';
+        
+        // リサイズイベントを発火させて描画を安定させる
+        if (scene.resize) {
+            scene.resize();
+        }
+    }
+
+    // 閉じる時：ギャラリーの幕を再び被せる
+    function closeViewer() {
+        const scene = document.getElementById('scene');
+        
+        // VRモード中であれば解除
+        if (scene && scene.is('vr-mode')) {
+            scene.exitVR();
+        }
+        
+        // A-FRAMEを裏に隠す
+        scene.style.zIndex = '-1';
+        scene.style.visibility = 'hidden';
+        document.getElementById('vr-sky').setAttribute('src', '');
+        
+        document.getElementById('custom-close-ui').style.display = 'none';
+        document.getElementById('gallery-ui').style.display = 'block';
+    }
+</script>
+</body>
+</html>
