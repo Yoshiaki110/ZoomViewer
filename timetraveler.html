@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Time Traveler</title>
-    <!--script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script-->
     <script src="https://aframe.io/releases/0.7.1/aframe.min.js"></script>
     <style>
         body, html { 
@@ -89,6 +88,7 @@
             box-shadow: 0 5px 20px rgba(0,0,0,0.8);
             transition: transform 0.8s ease-in-out, opacity 0.5s ease-in-out;
             cursor: pointer;
+            z-index: 10;
         }
 
         /* 閉じるボタン専用のUI */
@@ -96,8 +96,8 @@
             position: absolute;
             top: 20px;
             right: 20px;
-            z-index: 9999; /* 確実に一番手前に出す */
-            display: none; /* 初期は隠す */
+            z-index: 9999;
+            display: none; 
         }
 
         .ui-btn {
@@ -114,6 +114,19 @@
         .ui-btn:active {
             background: white;
             color: black;
+        }
+
+        /* --- 流れ星用のスタイル --- */
+        .shooting-star {
+            position: absolute;
+            width: 8px;  /* ★ 3pxから8pxに大きくしました */
+            height: 8px; /* ★ 3pxから8pxに大きくしました */
+            background-color: #ffffff;
+            border-radius: 50%;
+            /* ★ 光の拡散も少し大きく・明るくしました */
+            box-shadow: 0 0 20px 6px rgba(255, 255, 255, 0.9);
+            pointer-events: none; /* クリックの邪魔にならないようにする */
+            z-index: 1; /* 画像より奥から発生させるためZインデックスを下げる */
         }
     </style>
 </head>
@@ -236,7 +249,6 @@
         });
     }
 
-    // 画像クリック時：ギャラリーの幕を消し、裏にあるA-FRAMEを表に出す
     function openFullscreen(url) {
         document.getElementById('gallery-ui').style.display = 'none';
         document.getElementById('custom-close-ui').style.display = 'block';
@@ -244,26 +256,21 @@
         const scene = document.getElementById('scene');
         document.getElementById('vr-sky').setAttribute('src', url);
         
-        // A-FRAMEを最前面に表示
         scene.style.zIndex = '10';
         scene.style.visibility = 'visible';
         
-        // リサイズイベントを発火させて描画を安定させる
         if (scene.resize) {
             scene.resize();
         }
     }
 
-    // 閉じる時：ギャラリーの幕を再び被せる
     function closeViewer() {
         const scene = document.getElementById('scene');
         
-        // VRモード中であれば解除
         if (scene && scene.is('vr-mode')) {
             scene.exitVR();
         }
         
-        // A-FRAMEを裏に隠す
         scene.style.zIndex = '-1';
         scene.style.visibility = 'hidden';
         document.getElementById('vr-sky').setAttribute('src', '');
@@ -271,6 +278,56 @@
         document.getElementById('custom-close-ui').style.display = 'none';
         document.getElementById('gallery-ui').style.display = 'block';
     }
+
+    // --- ここから流れ星エフェクトの処理 ---
+    function spawnShootingStar() {
+        // VRプレビュー画面を開いている時は星を作らない
+        const galleryUI = document.getElementById('gallery-ui');
+        if (galleryUI.style.display === 'none') return;
+
+        const star = document.createElement('div');
+        star.className = 'shooting-star';
+        
+        // トンネルコンテナの中に星を追加
+        document.getElementById('tunnel-container').appendChild(star);
+
+        // 中央を起点とする
+        star.style.top = '50%';
+        star.style.left = '50%';
+
+        // X軸とY軸のランダムな位置（画面いっぱいに散らばるように）
+        const startX = (Math.random() - 0.5) * 3000;
+        const startY = (Math.random() - 0.5) * 3000;
+        
+        // Z軸の移動: 画面の奥深く（マイナス）から、カメラを通り過ぎる手前（プラス）へ
+        const startZ = -4000;
+        const endZ = 1000;
+
+        // 星が流れるスピード（1秒〜2.5秒）
+        const duration = 1000 + Math.random() * 1500;
+
+        // アニメーションの実行
+        const animation = star.animate([
+            // 発生時は透明
+            { transform: `translate(-50%, -50%) translate3d(${startX}px, ${startY}px, ${startZ}px)`, opacity: 0 },
+            // 少し進んだらパッと明るくなる
+            { transform: `translate(-50%, -50%) translate3d(${startX}px, ${startY}px, ${startZ + 500}px)`, opacity: 1, offset: 0.1 },
+            // 手前に来たら消える
+            { transform: `translate(-50%, -50%) translate3d(${startX}px, ${startY}px, ${endZ}px)`, opacity: 0 }
+        ], {
+            duration: duration,
+            easing: 'ease-in' // 手前に来るにつれてスピード感が増すように
+        });
+
+        // 通り過ぎたらHTMLから要素を削除して軽くする
+        animation.onfinish = () => {
+            star.remove();
+        };
+    }
+
+    // 60ミリ秒に1回、新しい星を発生させる
+    setInterval(spawnShootingStar, 60);
+
 </script>
 </body>
 </html>
